@@ -221,6 +221,22 @@ $('#btnParseText').onclick = async () => {
 };
 $('#btnConfirm').onclick = validateAndImport;
 $('#btnCancel').onclick = () => { pending = []; $('#preview').innerHTML = ''; $('#confirmRow').style.display = 'none'; };
+function weeksFromList(list) {
+  const arr = (list || []).map(Number).filter(function (n) { return n > 0; }).sort(function (a, b) { return a - b; });
+  if (!arr.length) return { ranges: [[1, state.config.totalWeeks || 20]], parity: 'all' };
+  const ranges = [];
+  let start = arr[0];
+  let prev = arr[0];
+  for (let i = 1; i < arr.length; i++) {
+    if (arr[i] === prev + 1) { prev = arr[i]; continue; }
+    ranges.push([start, prev]);
+    start = arr[i];
+    prev = arr[i];
+  }
+  ranges.push([start, prev]);
+  return { ranges: ranges, parity: 'all' };
+}
+
 $('#btnManual').onclick = async () => {
   const maxSec = state.config.sectionsPerDay || 12;
   const v = await uiForm('手动添加课程', [
@@ -231,37 +247,79 @@ $('#btnManual').onclick = async () => {
       { value: 7, label: '周日' }] },
     { key: 'startSection', label: '开始节次', type: 'number', value: 1, min: 1, max: maxSec, half: true },
     { key: 'endSection', label: '结束节次', type: 'number', value: 1, min: 1, max: maxSec, half: true },
+    { key: 'weeks', label: '上课周次（可多选，不选=全学期）', type: 'checks', options: (function () { const a = []; const n = state.config.totalWeeks || 20; for (let i = 1; i <= n; i++) a.push({ value: i, label: String(i) }); return a; })() },
     { key: 'teacher', label: '教师', type: 'text', placeholder: '可留空', half: true },
     { key: 'location', label: '地点', type: 'text', placeholder: '可留空', half: true },
   ]);
   if (!v) return;
   const s = v.startSection, e2 = v.endSection;
   if (!(s >= 1 && e2 >= s)) { uiAlert('节次不对：结束节次不能早于开始'); return; }
-  state.courses.push({ name: v.name, teacher: v.teacher, location: v.location, weekday: Number(v.weekday), startSection: s, endSection: e2, weeks: { ranges: [[1, state.config.totalWeeks]], parity: 'all' } });
+  state.courses.push({ name: v.name, teacher: v.teacher, location: v.location, weekday: Number(v.weekday), startSection: s, endSection: e2, weeks: weeksFromList(v.weeks) });
   save(); renderToday(); renderTimetable();
   uiAlert('已添加「' + v.name + '」');
 };
-$('#btnTemp').onclick = async () => {
-  const maxSec = state.config.sectionsPerDay || 12;
-  const v = await uiForm('临时加课', [
-    { key: 'name', label: '课程名称', type: 'text', required: true, placeholder: '例如 补课' },
-    { key: 'date', label: '上课日期', type: 'date', required: true, value: formatLocalDate(new Date()) },
-    { key: 'startSection', label: '开始节次', type: 'number', value: 1, min: 1, max: maxSec, half: true },
-    { key: 'endSection', label: '结束节次', type: 'number', value: 1, min: 1, max: maxSec, half: true },
-    { key: 'teacher', label: '教师', type: 'text', placeholder: '可留空', half: true },
-    { key: 'location', label: '地点', type: 'text', placeholder: '可留空', half: true },
-  ]);
-  if (!v) return;
-  const s = v.startSection, e2 = v.endSection;
-  if (!(s >= 1 && e2 >= s)) { uiAlert('节次不对：结束节次不能早于开始'); return; }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v.date).trim())) { uiAlert('日期格式不对，应形如 2026-10-20'); return; }
-  state.courses.push({
-    name: v.name, teacher: v.teacher, location: v.location,
-    date: String(v.date).trim(), startSection: s, endSection: e2, weeks: null, temp: true,
-  });
-  save(); renderToday(); renderTimetable();
-  uiAlert('已添加临时课：\n' + String(v.date).trim() + ' 第' + s + '-' + e2 + '节 ' + v.name);
-};
+function ensureTempPage() {
+  if (document.getElementById('page-temp')) return;
+  const html = '<div class="page" id="page-temp">' +
+    '<header><button class="back" id="btnTempBack">‹</button><h1>临时加课</h1></header>' +
+    '<div class="temp-body">' +
+      '<div class="temp-field"><label>课程名称</label><input id="tempName" class="ud-input" placeholder="例如 补课"></div>' +
+      '<div class="temp-field"><label>上课日期</label><input id="tempDate" class="ud-input date-readonly" readonly placeholder="点击选择日期"></div>' +
+      '<div class="temp-row">' +
+        '<div class="temp-field"><label>开始节次</label><input id="tempStart" class="ud-input" type="number" inputmode="numeric" value="1"></div>' +
+        '<div class="temp-field"><label>结束节次</label><input id="tempEnd" class="ud-input" type="number" inputmode="numeric" value="1"></div>' +
+      '</div>' +
+      '<div class="temp-row">' +
+        '<div class="temp-field"><label>教师</label><input id="tempTeacher" class="ud-input" placeholder="可留空"></div>' +
+        '<div class="temp-field"><label>地点</label><input id="tempLoc" class="ud-input" placeholder="可留空"></div>' +
+      '</div>' +
+      '<div class="temp-actions">' +
+        '<button class="ghost" id="btnTempCancel">取消</button>' +
+        '<button class="primary" id="btnTempSave">保存</button>' +
+      '</div>' +
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  bindDateInput($('#tempDate'));
+  $('#btnTempBack').onclick = () => switchTab('page-today');
+  $('#btnTempCancel').onclick = () => switchTab('page-today');
+  $('#btnTempSave').onclick = () => {
+    const maxSec = state.config.sectionsPerDay || 12;
+    const v = {
+      name: ($('#tempName').value || '').trim(),
+      date: ($('#tempDate').value || '').trim(),
+      startSection: parseInt($('#tempStart').value, 10),
+      endSection: parseInt($('#tempEnd').value, 10),
+      teacher: ($('#tempTeacher').value || '').trim(),
+      location: ($('#tempLoc').value || '').trim(),
+    };
+    if (!v.name) { uiAlert('请填课程名称'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date)) { uiAlert('请选择上课日期'); return; }
+    const s = v.startSection, e2 = v.endSection;
+    if (!(s >= 1 && e2 >= s && e2 <= maxSec)) { uiAlert('节次不对：不能超过今天的节次上限'); return; }
+    state.courses.push({
+      name: v.name, teacher: v.teacher, location: v.location,
+      date: v.date, startSection: s, endSection: e2, weeks: null, temp: true,
+    });
+    save(); renderToday(); renderTimetable();
+    resetTempForm();
+    switchTab('page-today');
+  };
+}
+
+function resetTempForm() {
+  const n = $('#tempName'); if (n) n.value = '';
+  const t = $('#tempTeacher'); if (t) t.value = '';
+  const l = $('#tempLoc'); if (l) l.value = '';
+  const s = $('#tempStart'); if (s) s.value = '1';
+  const e = $('#tempEnd'); if (e) e.value = '1';
+}
+
+function openTempCourse(defaultDate) {
+  ensureTempPage();
+  resetTempForm();
+  $('#tempDate').value = defaultDate || formatLocalDate(new Date());
+  switchTab('page-temp');
+}
 $('#btnClearAll').onclick = async () => {
   if (!state.courses.length) { uiAlert('当前没有课程'); return; }
   const ok = await uiConfirm('清空后所有课程都会消失，且无法恢复。\n建议先去下面「备份成 JSON」。', '清空全部课程', '清空', '再想想');

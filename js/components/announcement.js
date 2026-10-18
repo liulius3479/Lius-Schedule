@@ -14,7 +14,7 @@ function renderAnnouncementPage() {
 
 function renderChangelogPage() {
   const el = $('#changelogBody');
-  if (el) el.textContent = APP_ANNOUNCEMENT || '';
+  if (el) el.textContent = (typeof APP_CHANGELOG !== 'undefined' ? APP_CHANGELOG : APP_ANNOUNCEMENT) || '';
 }
 
 function annReturnTab() {

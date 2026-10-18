@@ -31,7 +31,10 @@ function reminderCfg() {
 
 
 function coursesOfDay(dateObj) {
-  return coursesOn(dateObj);
+  const wk = calculateWeek(formatLocalDate(dateObj));
+  return coursesOn(dateObj).filter(function (c) {
+    return !(Array.isArray(c.skipWeeks) && c.skipWeeks.indexOf(wk) >= 0);
+  });
 }
 
 
@@ -308,9 +311,21 @@ function nativeNotify(title, content) {
   plus.android.importClass(nm);
 
   const NotificationChannel = plus.android.importClass('android.app.NotificationChannel');
+  const CH_ID = 'course-remind-v2';
   if (Build.VERSION.SDK_INT >= 26) {
-    const ch = new NotificationChannel('course-remind', '上课提醒', 4 /* IMPORTANCE_HIGH */);
-    ch.setDescription('每到上课前提醒一次');
+    const ch = new NotificationChannel(CH_ID, '上课提醒', 4 /* IMPORTANCE_HIGH */);
+    plus.android.importClass(ch);
+    ch.setDescription('上课前提醒；有新版本通道会重建以应用提示音');
+    try {
+      const RingtoneManager = plus.android.importClass('android.media.RingtoneManager');
+      const uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+      ch.setSound(uri, null);
+    } catch (e) { console.log('[通知] 设置提示音失败', e); }
+    try {
+      ch.enableVibration(true);
+      ch.setVibrationPattern([0, 220, 120, 220]);
+    } catch (e) {}
+    try { ch.setLockscreenVisibility(1 /* PUBLIC */); } catch (e) {}
     nm.createNotificationChannel(ch);
   }
 
@@ -321,7 +336,7 @@ function nativeNotify(title, content) {
   const pi = PendingIntent.getActivity(main, 0, Intent2, 0x04000000 /* FLAG_IMMUTABLE */);
 
   const Builder = plus.android.importClass('android.app.Notification$Builder');
-  const b = new Builder(main, 'course-remind');
+  const b = new Builder(main, 'course-remind-v2');
   plus.android.invoke(b, 'setContentTitle', title);
   plus.android.invoke(b, 'setContentText', content);
   let smallIcon = 0;
@@ -339,7 +354,9 @@ function nativeNotify(title, content) {
   plus.android.invoke(b, 'setSmallIcon', smallIcon);
   plus.android.invoke(b, 'setAutoCancel', true);
   plus.android.invoke(b, 'setContentIntent', pi);
-  plus.android.invoke(b, 'setPriority', 1 /* PRIORITY_HIGH */);
+  plus.android.invoke(b, 'setPriority', 2 /* PRIORITY_MAX */);
+  try { plus.android.invoke(b, 'setDefaults', 7 /* DEFAULT_ALL */); } catch (e) {}
+  try { plus.android.invoke(b, 'setVisibility', 1 /* VISIBILITY_PUBLIC */); } catch (e) {}
   const n = plus.android.invoke(b, 'build');
   plus.android.invoke(nm, 'notify', 20261017, n);
   return true;
@@ -348,7 +365,35 @@ function nativeNotify(title, content) {
 
 
 
+function dailyCfg() {
+  if (!state.config.dailySummary || typeof state.config.dailySummary !== 'object') {
+    state.config.dailySummary = { on: false, time: '21:30', last: '' };
+  }
+  return state.config.dailySummary;
+}
+
+function checkDailySummary() {
+  const d = dailyCfg();
+  if (!d.on) return;
+  const now = new Date();
+  const hm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  const today = formatLocalDate(now);
+  if (d.last === today) return;
+  if (hm < d.time) return;
+  d.last = today;
+  try { save(); } catch (e) {}
+  let list = [];
+  try { list = coursesOn(new Date(now.getTime() + 86400000)) || []; } catch (e) { list = []; }
+  let content;
+  if (!list.length) content = '明天没有课，安心睡吧。';
+  else content = list.slice(0, 6).map(function (c) {
+    return '第' + c.startSection + '-' + c.endSection + '节 ' + c.name + (c.location ? ' @' + c.location : '');
+  }).join('；');
+  notifyLocal('明天的课', content);
+}
+
 function checkReminders() {
+  checkDailySummary();
   const cfg = reminderCfg();
   if (!cfg.enabled) return;
   const now = new Date();
@@ -514,7 +559,7 @@ function renderNotifyPage() {
 
   const btnPerm = $('#btnPerm');
   if (btnPerm) {
-    btnPerm.textContent = (s === 'denied') ? '申请授权' : (s === 'blocked' ? '去系统设置' : '检查');
+    btnPerm.textContent = (s === 'blocked') ? '去系统设置' : '发测试通知';
     btnPerm.disabled = (s === 'unsupported');
     btnPerm.style.opacity = btnPerm.disabled ? '.45' : '1';
   }
@@ -547,6 +592,30 @@ function renderNotifyPage() {
       '但通知被拦有几层：<b>通知权限</b> → <b>自启动/后台运行</b> → <b>电池优化</b>，' +
       '三层都放开才算真的收得到。';
   }
+
+  // 每日课程汇总
+  const dc = dailyCfg();
+  const swDaily = $('#swDaily');
+  if (swDaily) {
+    swDaily.classList.toggle('on', !!dc.on);
+    swDaily.setAttribute('aria-checked', dc.on ? 'true' : 'false');
+    swDaily.onclick = () => {
+      dc.on = !dc.on;
+      dc.last = '';
+      save();
+      renderNotifyPage();
+    };
+  }
+  const rowDaily = $('#dailyTimeRow');
+  if (rowDaily) rowDaily.style.display = dc.on ? '' : 'none';
+  const dd = $('#dailyDesc');
+  if (dd) dd.textContent = dc.on ? ('每天 ' + dc.time + ' 汇总第二天的课') : '关';
+  const btnDailyTime = $('#btnDailyTime');
+  if (btnDailyTime) {
+    btnDailyTime.textContent = dc.time;
+    btnDailyTime.onclick = () => openDailyTimePicker(dc.time);
+  }
+
 }
 
 
@@ -577,12 +646,17 @@ function renderNotifyPage() {
   if (btnPerm) {
     btnPerm.onclick = () => {
       const s = notifPermState();
-      if (s === 'granted') { renderNotifyPage(); return; }
-      if (s === 'blocked' || s === 'unsupported') { openAppNotifSettings(); return; }
+      if (s === 'granted') {
+        notifyLocal('课程表 · 测试提醒', '能看到这条，说明系统通知是通的');
+        return;
+      }
+      if (s === 'unsupported') { uiAlert('当前环境不支持系统通知，装成 App 之后再测。'); return; }
+      if (s === 'blocked') { openAppNotifSettings(); return; }
       requestNotifPerm(ns => {
         renderNotifyPage();
         paintPermBadge(ns);
-        if (ns !== 'granted') openAppNotifSettings();
+        if (ns === 'granted') notifyLocal('课程表 · 测试提醒', '能看到这条，说明系统通知是通的');
+        else openAppNotifSettings();
       });
     };
   }
@@ -601,24 +675,6 @@ function renderNotifyPage() {
   if (btnAuto) btnAuto.onclick = () => {
     const ok = openAutoStartSettings();
     if (!ok) uiAlert('这台机器没有可直接打开的自启动页，请到「设置 → 应用管理 → 本应用 → 自启动/后台运行」里手动允许。');
-  };
-
-  const btnTest = $('#btnTestNotif');
-  if (btnTest) btnTest.onclick = () => {
-    const s = notifPermState();
-    if (s === 'granted') {
-      notifyLocal('课程表 · 测试提醒', '能看到这条，说明系统通知是通的');
-      return;
-    }
-    if (s === 'unsupported') { uiAlert('当前环境不支持系统通知，装成 App 之后再测。'); return; }
-    requestNotifPerm(ns => {
-      renderNotifyPage();
-      if (ns === 'granted') {
-        notifyLocal('课程表 · 测试提醒', '能看到这条，说明系统通知是通的');
-      } else {
-        uiAlert('没拿到通知权限，通知发不出去。可到系统设置里手动打开本应用的通知。');
-      }
-    });
   };
 
   const back1 = $('#btnReminderBack');

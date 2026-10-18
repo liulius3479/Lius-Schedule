@@ -66,13 +66,36 @@ function renderTimetable() {
       b.className = 'course';
       b.style.gridRow = `${sRow} / ${eRow + 1}`;
       b.style.gridColumn = c.weekday + 1;
-      b.style.setProperty('--c-rgb', hexToRgbStr(colorOf(c.name)));
+      if (c.color) {
+        b.style.setProperty('--c-rgb', hexToRgbStr(c.color));
+        b.setAttribute('data-ccolor', '1');
+      }
+      if (skipWeekOf(c) === (state.viewWeek ?? currentWeek())) {
+        b.classList.add('skipped');
+        b.innerHTML += '';
+      }
       b.innerHTML = `
         <b>${esc(c.name)}</b>
         ${c.location ? `<small class="at">${esc(c.location)}</small>` : ''}
         ${c.teacher ? `<small class="teacher">${esc(c.teacher)}</small>` : ''}
+        ${b.classList.contains('skipped') ? '<span class="skip-star">★</span>' : ''}
       `;
       b.addEventListener('click', () => showDetail(state.courses.indexOf(c)));
+      (function () {
+        let tm = 0, moved = false, sx = 0, sy = 0;
+        b.addEventListener('pointerdown', e => {
+          moved = false; sx = e.clientX; sy = e.clientY;
+          clearTimeout(tm);
+          tm = setTimeout(() => {
+            if (!moved) { try { navigator.vibrate && navigator.vibrate(12); } catch (_) {}
+              toggleSkipWeek(c); }
+          }, 460);
+        });
+        b.addEventListener('pointermove', e => {
+          if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) { moved = true; clearTimeout(tm); }
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(tn => b.addEventListener(tn, () => clearTimeout(tm)));
+      })();
       grid.appendChild(b);
     });
 
@@ -123,12 +146,65 @@ function showDayCourses(weekday) {
   $('#btnClose').onclick = () => $('#modal').classList.remove('show');
 }
 
-const PALETTE = ['#5b7cfa','#f2994a','#27ae60','#eb5757','#9b51e0','#2d9cdb','#f2c94c','#219653','#e07a5f','#6c5ce7'];
+const COLOR_CACHE = new Map();
 
-function colorOf(name) {
+function editCourseColor(c) {
+  const preset = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1', '#f97316', '#22c55e'];
+  const cur = (c.color || '').toLowerCase();
+  const opts = [''].concat(preset.indexOf(cur) < 0 && cur ? [cur] : [], preset);
+  uiForm('给「' + c.name + '」选颜色', [{
+    key: 'color', label: '课程颜色（第 1 个是「无颜色」）', type: 'color', value: cur || '', options: opts,
+  }]).then(function (res) {
+    if (!res) return;
+    if (res.color) c.color = res.color; else delete c.color;
+    save();
+    renderTimetable();
+  });
+}
+
+function skipWeekOf(c) {
+  const wk = state.viewWeek ?? currentWeek();
+  if (Array.isArray(c.skipWeeks) && c.skipWeeks.indexOf(wk) >= 0) return wk;
+  return 0;
+}
+
+function toggleSkipWeek(c) {
+  const wk = state.viewWeek ?? currentWeek();
+  if (!Array.isArray(c.skipWeeks)) c.skipWeeks = [];
+  const i = c.skipWeeks.indexOf(wk);
+  if (i >= 0) {
+    c.skipWeeks.splice(i, 1);
+    uiAlert('第 ' + wk + ' 周 星期' + WD_CN[c.weekday] + '「' + c.name + '」已取消标记，本周恢复上课');
+  } else {
+    c.skipWeeks.push(wk);
+    uiAlert('第 ' + wk + ' 周 星期' + WD_CN[c.weekday] + '「' + c.name + '」已标记不上，本周不会提醒');
+  }
+  save();
+  renderTimetable();
+  renderToday();
+}
+
+function colorOf(name, custom) {
+  return custom || '';
+  const key = String(name || '');
+  if (COLOR_CACHE.has(key)) return COLOR_CACHE.get(key);
   let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length];
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  // 黄金角散列：相邻取值的色相相差约 137.5°，课程之间不容易撞色
+  const hue = (h * 137.508) % 360;
+  const color = hslHex(hue, 62, 54);
+  COLOR_CACHE.set(key, color);
+  return color;
+}
+
+function hslHex(h, s, l) {
+  s /= 100;
+  l /= 100;
+  const k = n => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const to = x => Math.round(x * 255).toString(16).padStart(2, '0');
+  return '#' + to(f(0)) + to(f(8)) + to(f(4));
 }
 
 function shiftWeek(delta) {

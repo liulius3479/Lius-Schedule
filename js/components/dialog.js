@@ -78,7 +78,22 @@ function udFieldHtml(f) {
   const id = 'udf_' + f.key;
   const label = '<label class="ud-label" for="' + id + '">' + udEsc(f.label) + '</label>';
   let inner;
-  if (f.type === 'select') {
+  if (f.type === 'checks') {
+    const opts = (f.options || []).map(function (o) {
+      const v = (o && o.value != null) ? o.value : o;
+      const t = (o && o.label != null) ? o.label : o;
+      const on = Array.isArray(f.value) && f.value.map(String).indexOf(String(v)) >= 0 ? ' on' : '';
+      return '<button type="button" class="ud-check' + on + '" data-v="' + udEsc(v) + '">' + udEsc(t) + '</button>';
+    }).join('');
+    inner = '<div class="ud-checks" data-key="' + udEsc(f.key) + '">' + opts + '</div>';
+  } else if (f.type === 'color') {
+    const opts = (f.options || []).map(function (o) {
+      const v = (o && o.value != null) ? o.value : o;
+      const on = String(v).toLowerCase() === String(f.value == null ? '' : f.value).toLowerCase() ? ' on' : '';
+      return '<button type="button" class="ud-color' + on + '" data-c="' + udEsc(v) + '" style="background:' + udEsc(v) + '"></button>';
+    }).join('');
+    inner = '<div class="ud-colors" data-key="' + udEsc(f.key) + '">' + opts + '</div>';
+  } else if (f.type === 'select') {
     const opts = (f.options || []).map(function (o) {
       const v = (o && o.value != null) ? o.value : o;
       const t = (o && o.label != null) ? o.label : o;
@@ -135,9 +150,28 @@ function uiForm(title, fields) {
         if (f.required && (v === '' || v == null)) { err = '请填写' + f.label; break; }
         out[key] = v;
       }
+      card.querySelectorAll('.ud-checks').forEach(function (grp) {
+        const vals = [];
+        grp.querySelectorAll('.ud-check.on').forEach(function (b) { vals.push(b.dataset.v); });
+        out[grp.dataset.key] = vals;
+      });
+      card.querySelectorAll('.ud-colors').forEach(function (grp) {
+        const on = grp.querySelector('.ud-color.on');
+        out[grp.dataset.key] = on ? on.dataset.c : '';
+      });
       if (err) { card.querySelector('#udErr').textContent = err; return; }
       udClose(out);
     };
+    card.querySelectorAll('.ud-check').forEach(function (b) {
+      b.onclick = function () { b.classList.toggle('on'); };
+    });
+    card.querySelectorAll('.ud-color').forEach(function (b) {
+      b.onclick = function () {
+        const grp = b.parentNode;
+        grp.querySelectorAll('.ud-color').forEach(function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+      };
+    });
     const first = card.querySelector('.ud-input:not([readonly])');
     if (first) { try { first.focus(); } catch (e) {} }
 

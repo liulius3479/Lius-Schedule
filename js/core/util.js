@@ -92,8 +92,11 @@ function currentWeek() {
 function calculateWeek(dateStr) {
   if (!state.config.startDate) return 1;
   const start = new Date(state.config.startDate + 'T00:00:00');
+  // 对齐到开学那一周的周一，保证与课程表的自然周一致
+  const startMon = new Date(start.getTime());
+  startMon.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const d = new Date(dateStr + 'T00:00:00');
-  const days = Math.floor((d - start) / 86400000);
+  const days = Math.floor((d - startMon) / 86400000);
   return Math.max(1, Math.floor(days / 7) + 1);
 }
 

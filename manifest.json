@@ -3,7 +3,7 @@
     "id" : "H56166137", /*应用的标识*/
     "name" : "Lius Schedule", /*应用名称，程序桌面图标名称*/
     "version" : {
-        "name" : "1.26.10.18 v1", /*应用版本名称*/
+        "name" : "1.26.10.18 v3", /*应用版本名称*/
         "code" : 101
     },
     "description" : "本地导入课程表", /*应用描述信息*/
@@ -79,7 +79,8 @@
         },
         "NativeObj" : {
             "description" : "原生对象"
-        }
+        },
+        "Camera" : {}
     },
     "plus" : {
         /* ========== 沉浸式状态栏配置（解决状态栏显示与灰边问题） ========== */
@@ -95,6 +96,7 @@
         },
         "popGesture" : "close", /*设置应用默认侧滑返回关闭Webview窗口，"none"为无侧滑返回功能，"hide"为侧滑隐藏Webview窗口。参考http://ask.dcloud.net.cn/article/102*/
         "runmode" : "normal", /*应用的首次启动运行模式，可取liberate或normal，liberate模式在第一次启动时将解压应用资源（Android平台File API才可正常访问_www目录）*/
+        "softinputMode" : "adjustNothing", /*软键盘弹出时不改变 Webview 视口，fixed 元素（dock、悬浮球）不会被顶到屏幕中间*/
         "signature" : "Sk9JTiBVUyBtYWlsdG86aHIyMDEzQGRjbG91ZC5pbw==", /*可选，保留给应用签名，暂不使用*/
         "distribute" : {
             "apple" : {

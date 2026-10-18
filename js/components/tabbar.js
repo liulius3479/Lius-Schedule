@@ -1,7 +1,7 @@
 /* components/tabbar.js — 底部胶囊 dock 与切页。 */
 
 const TAB_SEQ = ['page-today', 'page-timetable', 'page-mine'];
-const SUBPAGES = ['page-import', 'page-about', 'page-reminder', 'page-notify', 'page-theme', 'page-announcement', 'page-changelog'];
+const SUBPAGES = ['page-import', 'page-about', 'page-reminder', 'page-notify', 'page-theme', 'page-announcement', 'page-changelog', 'page-temp'];
 const PAGE_ANIMS = ['anim-in', 'anim-in-right', 'anim-in-left', 'anim-in-push', 'anim-in-pop'];
 
 function syncFixedBack() {
@@ -43,24 +43,7 @@ function switchTab(tabId) {
   const cur = document.querySelector('.page.active');
   const fromId = cur ? cur.id : '';
 
-  if (fromId !== tabId) {
-    $$('.page').forEach(p => p.classList.remove('active'));
-    page.classList.add('active');
-    PAGE_ANIMS.forEach(c => page.classList.remove(c));
-    void page.offsetWidth;
-    page.classList.add(navAnimClass(fromId, tabId));
-
-
-    if (page._animClear) page.removeEventListener('animationend', page._animClear);
-    page._animClear = function (e) {
-      if (e.target !== page) return;
-      PAGE_ANIMS.forEach(c => page.classList.remove(c));
-    };
-    page.addEventListener('animationend', page._animClear);
-  }
-  $$('.tab-item').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
-  document.body.classList.toggle('subpage', SUBPAGES.indexOf(tabId) >= 0);
-
+  // 先渲染内容再起动画：新节点先进入布局完成一次 backdrop 采样，动画里就不会闪透明
   if (tabId === 'page-today') renderToday();
   if (tabId === 'page-timetable') renderTimetable();
   if (tabId === 'page-mine') renderMine();
@@ -68,6 +51,39 @@ function switchTab(tabId) {
   if (tabId === 'page-theme' && typeof renderThemePage === 'function') renderThemePage();
   if (tabId === 'page-about') renderMine();
   if (tabId === 'page-reminder' && typeof renderReminderPage === 'function') renderReminderPage();
+
+  if (fromId !== tabId) {
+    $$('.page').forEach(p => p.classList.remove('active'));
+    PAGE_ANIMS.forEach(c => page.classList.remove(c));
+    // 先隐藏布局一帧，让 backdrop-filter 完成首次采样，再显示并起动画
+    page.style.visibility = 'hidden';
+    page.classList.add('active');
+    void page.offsetWidth;
+    const animCls = navAnimClass(fromId, tabId);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      page.style.visibility = '';
+      void page.offsetWidth;
+      page.classList.add(animCls);
+    }));
+
+
+    if (page._animClear) page.removeEventListener('animationend', page._animClear);
+    document.body.classList.add('page-animating');
+    if (window.__animatingTimer) clearTimeout(window.__animatingTimer);
+    window.__animatingTimer = setTimeout(function () {
+      document.body.classList.remove('page-animating');
+    }, 360);
+    page._animClear = function (e) {
+      if (e.target !== page) return;
+      PAGE_ANIMS.forEach(c => page.classList.remove(c));
+      document.body.classList.remove('page-animating');
+    };
+    page.addEventListener('animationend', page._animClear);
+  }
+  $$('.tab-item').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+  document.body.classList.toggle('subpage', SUBPAGES.indexOf(tabId) >= 0);
+
+
   if (tabId === 'page-notify' && typeof renderNotifyPage === 'function') renderNotifyPage();
   if (SUBPAGES.indexOf(tabId) >= 0) {
     page.scrollTop = 0;

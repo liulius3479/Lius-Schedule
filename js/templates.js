@@ -111,7 +111,6 @@ const IMPORT_HTML = `
     </div>
     <div class="row" style="margin-top: 8px;">
       <button class="ghost" id="btnManual">手动添加一门课</button>
-      <button class="ghost" id="btnTemp">临时加课</button>
     </div>
     <div class="row" style="margin-top: 8px;">
       <button class="ghost" id="btnDeleteCourse" style="color:#e5484d;">删除课程</button>
@@ -261,9 +260,23 @@ const NOTIFY_HTML = `
       </div>
     </div>
 
+    <div class="section-title">🌙 每日课程汇总</div>
     <div class="remind-card">
       <div class="remind-row">
-        <button class="val-btn wide" id="btnTestNotif">发一条测试通知</button>
+        <div class="rr-main">
+          <div class="rr-title">每晚提醒第二天的课</div>
+          <div class="rr-sub" id="dailyDesc">关</div>
+        </div>
+        <button class="pill-switch" id="swDaily" role="switch" aria-checked="false">
+          <span class="pill-knob"></span>
+        </button>
+      </div>
+      <div class="remind-row" id="dailyTimeRow" style="display:none;">
+        <div class="rr-main">
+          <div class="rr-title">提醒时间</div>
+          <div class="rr-sub">每天到这个点，把第二天的课汇总成一条通知</div>
+        </div>
+        <button class="val-btn" id="btnDailyTime">21:30</button>
       </div>
     </div>
 

@@ -92,6 +92,21 @@ function openAdvancePicker(curMinutes) {
     v => String(v).padStart(2, '0') + '<span class="u">分</span>');
 }
 
+function openDailyTimePicker(cur) {
+  const m = $('#tpModal');
+  if (!m) return;
+  const parts = String(cur || '21:30').split(':');
+  let hh = parseInt(parts[0], 10); if (!(hh >= 0 && hh <= 23)) hh = 21;
+  let mm = parseInt(parts[1], 10); if (isNaN(mm) || mm < 0 || mm > 59) mm = 30;
+  tpCtx = { mode: 'daily' };
+  const t = $('#tpTitle');
+  if (t) t.textContent = '每晚汇总时间';
+  m.classList.add('show');
+  tpWheelH = buildWheel($('#wheelH'), TP_HOURS, TP_HOURS.indexOf(hh), v => v + '<span class="u">时</span>');
+  tpWheelM = buildWheel($('#wheelM'), TP_MINS, mm, v => String(v).padStart(2, '0') + '<span class="u">分</span>');
+}
+
+
 function closeTimePicker() {
   const m = $('#tpModal');
   if (m) m.classList.remove('show');
@@ -101,6 +116,18 @@ function closeTimePicker() {
 function confirmTimePicker() {
   if (!tpCtx || !tpWheelH || !tpWheelM) { closeTimePicker(); return; }
 
+
+  if (tpCtx.mode === 'daily') {
+    const hh = String(tpWheelH.value()).padStart(2, '0');
+    const mm = String(tpWheelM.value()).padStart(2, '0');
+    const dc = dailyCfg();
+    dc.time = hh + ':' + mm;
+    dc.last = '';
+    save();
+    closeTimePicker();
+    if (typeof renderNotifyPage === 'function') renderNotifyPage();
+    return;
+  }
 
   if (tpCtx.mode === 'advance') {
     let mins = tpWheelH.value() * 60 + tpWheelM.value();

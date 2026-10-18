@@ -19,7 +19,7 @@ function showDetail(index) {
     ${skipText ? `<div class="kv"><span>停课</span><span>${esc(skipText)}</span></div>` : ''}
     <div class="row" style="margin-top:16px; justify-content: center; flex-wrap: wrap; gap: 8px;">
       <button class="ghost" id="btnEdit" style="background:rgba(91,124,250,0.12);color:var(--accent)">编辑</button>
-      ${isTemp ? '' : '<button class="ghost" id="btnSkipDay" style="background:#fff4e5;color:#c2681a">这天不上</button>'}
+      <button class="ghost" id="btnColor" style="background:rgba(91,124,250,0.10);color:var(--accent)">颜色</button>
       <button class="ghost" id="btnDel" style="background:#ffe9e9;color:#e5484d">删除这门课</button>
       <button class="ghost" id="btnClose">关闭</button>
     </div>
@@ -27,18 +27,10 @@ function showDetail(index) {
   $('#modal').classList.add('show');
   $('#btnClose').onclick = () => $('#modal').classList.remove('show');
   $('#btnEdit').onclick = () => openEditCourse(index);
-  const skipBtn = $('#btnSkipDay');
-  if (skipBtn) skipBtn.onclick = async () => {
-    const v = await uiForm('设置停课日期', [
-      { key: 'date', label: '哪一天停课', type: 'date', required: true, value: formatLocalDate(new Date()) },
-    ]);
-    if (!v) return;
-    const ds = String(v.date).trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) { uiAlert('日期格式不对，应形如 2026-10-20'); return; }
-    if (!Array.isArray(c.skip)) c.skip = [];
-    if (c.skip.indexOf(ds) < 0) c.skip.push(ds);
-    save(); renderToday(); renderTimetable();
+  const colorBtn = $('#btnColor');
+  if (colorBtn) colorBtn.onclick = () => {
     $('#modal').classList.remove('show');
+    editCourseColor(c);
   };
   $('#btnDel').onclick = async () => {
     const ok = await uiConfirm('删除后这门课会从课表里彻底消失，无法撤销。', '删除「' + c.name + '」', '删除');

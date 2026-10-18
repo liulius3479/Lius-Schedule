@@ -42,12 +42,12 @@ function renderToday() {
   const IN_X = 26;
   const OUT_MS = dir ? 150 : 0;
   if (dir) {
-    listEl.style.transition = 'transform .15s ease, opacity .15s ease';
+    // 只做位移，不做透明度：opacity 过渡会让玻璃卡片在淡出淡入时看起来是透明的
+    listEl.style.transition = 'transform .15s ease';
     listEl.style.transform = 'translateX(' + (-dir * IN_X) + 'px)';
-    listEl.style.opacity = '0';
   } else {
+    // 无方向切换时不要先置 opacity 0：卡片会淡入，玻璃在淡入过程中看起来是透明的
     listEl.style.transition = 'none';
-    listEl.style.opacity = '0';
   }
 
   setTimeout(() => {
@@ -100,7 +100,10 @@ function renderToday() {
           if (m.location) parts.push(m.location);
           if (m.teacher) parts.push(m.teacher);
           const tempTag = m.ref && m.ref.date ? '<span class="di-temp">临时</span>' : '';
-          return "<div class=\"day-item\" onclick=\"showDetail(" + state.courses.indexOf(m.ref) + ")\">" +
+          const skipped = m.ref && Array.isArray(m.ref.skipWeeks) && m.ref.skipWeeks.indexOf(calculateWeek(state.viewDate)) >= 0;
+          const star = skipped ? '<span class="skip-star">★</span>' : '';
+          return "<div class=\"day-item" + (skipped ? " skipped" : "") + "\" onclick=\"showDetail(" + state.courses.indexOf(m.ref) + ")\">" +
+            star +
             "<div class=\"di-main\"><div class=\"di-name\">" + esc(m.name) + tempTag + "</div>" +
             "<div class=\"di-meta\">" + parts.map(p => esc(p)).join(" | ") + "</div></div>" +
             "<div class=\"di-right\"><div class=\"di-time\">" + startTime + " - " + endTime + "</div>" +
@@ -114,7 +117,7 @@ function renderToday() {
     listEl.style.transition = 'none';
     listEl.style.transform = 'translateX(' + (dir * IN_X) + 'px)';
     void listEl.offsetWidth;
-    listEl.style.transition = 'transform .26s cubic-bezier(.22,.61,.36,1), opacity .22s ease';
+    listEl.style.transition = 'transform .26s cubic-bezier(.22,.61,.36,1)';
     listEl.style.opacity = '1';
     listEl.style.transform = 'translateX(0)';
   }, OUT_MS);

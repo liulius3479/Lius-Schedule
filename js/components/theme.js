@@ -13,6 +13,15 @@ const THEME_PRESETS = [
     accent: '#8fb4ff',
     veil: '0.30',
     lum: 0.266
+  },
+  {
+    id: 'catgirl',
+    name: '金发猫娘',
+    sub: '金发 · 猫耳',
+    img: 'img/preset-catgirl.jpg',
+    accent: '#e8b84b',
+    veil: '0.05',
+    lum: 0.78
   }
 ];
 
@@ -40,11 +49,30 @@ function currentBgSrc() {
   return state.config.bgImage || '';
 }
 
+function setGlassMode(mode) {
+  state.config.glassMode = (mode === 'clear') ? 'clear' : 'frosted';
+  save();
+  applyTheme();
+  renderThemePage();
+}
+
 function applyTheme() {
   const t = state.config.theme || 'light';
   const src = currentBgSrc();
   const preset = (t === 'custom') ? getPreset(state.config.preset) : null;
   document.documentElement.setAttribute('data-theme', t);
+  document.documentElement.setAttribute('data-glass', state.config.glassMode === 'clear' ? 'clear' : 'frosted');
+  const tcol = state.config.themeColor || '';
+  document.documentElement.style.setProperty('--pick', tcol || '#2563eb');
+  if (tcol) {
+    document.documentElement.style.setProperty('--accent', tcol);
+    document.documentElement.style.setProperty('--icon-color', tcol);
+    document.documentElement.setAttribute('data-user-icon', '1');
+  } else {
+    document.documentElement.style.setProperty('--accent', '#4c7dff');
+    document.documentElement.style.removeProperty('--icon-color');
+    document.documentElement.removeAttribute('data-user-icon');
+  }
   document.documentElement.style.setProperty('--bg-image', src ? `url("${src}")` : 'none');
   document.documentElement.style.setProperty('--bg-veil', preset ? preset.veil : '0.34');
   document.body.classList.toggle('has-bg', !!src);
@@ -59,6 +87,34 @@ function applyTheme() {
   renderAccentRow();
   syncStatusBar();
   syncTextTone(src, preset);
+  applyPickBorder();
+}
+
+function applyPickBorder() {
+  const cards = document.querySelectorAll('.theme-card, .preset-card');
+  for (let i = 0; i < cards.length; i++) {
+    cards[i].classList.remove('on');
+    cards[i].style.removeProperty('border');
+    cards[i].style.removeProperty('box-shadow');
+  }
+  const c = state.config || {};
+  const pick = c.themeColor || '#2563eb';
+  const mark = function (el) {
+    if (!el) return;
+    el.classList.add('on');
+    el.style.setProperty('border', '1.5px solid ' + pick, 'important');
+    el.style.setProperty('box-shadow', 'none', 'important');
+  };
+  mark(document.querySelector('[data-glass-pick="' + (c.glassMode || 'frosted') + '"]'));
+  mark(document.querySelector('[data-theme-color="' + (c.themeColor || '') + '"]'));
+  const hasPreset = !!(c.preset || c.myPresetId);
+  if (hasPreset) {
+    if (c.myPresetId) mark(document.querySelector('[data-my-pick="' + c.myPresetId + '"]'));
+    else mark(document.querySelector('[data-preset-pick="' + c.preset + '"]'));
+    mark(document.querySelector('[data-tone-pick="' + (c.bgTone || 'auto') + '"]'));
+  } else if (c.theme === 'light' || c.theme === 'dark') {
+    mark(document.querySelector('[data-theme-pick="' + c.theme + '"]'));
+  }
 }
 
 
@@ -106,16 +162,10 @@ function applyTextTone(lum) {
   const bright = manual === 'light' ? true : (manual === 'dark' ? false : autoBright);
 
   if (bright) html.setAttribute('data-onbg', 'light');
-  else html.removeAttribute('data-onbg');
+  else html.setAttribute('data-onbg', 'dark');
   const tip = $('#textToneTip');
   if (tip) {
-    tip.textContent = manual === 'light'
-      ? '背景明暗：手动设为浅色（dock 和文字都走浅色）。'
-      : manual === 'dark'
-        ? '背景明暗：手动设为深色（dock 和文字都走深色）。'
-        : lum == null
-          ? '亮暗检测没读到背景图像素，先按深色背景处理。'
-          : (bright ? '检测到背景偏亮，已自动换成深色字、白色 dock。' : '检测到背景偏暗，已自动用浅色字、深色 dock。');
+    tip.textContent = '当前检测：' + (manual === 'light' ? '浅色背景' : manual === 'dark' ? '深色背景' : (lum == null ? '深色背景' : (bright ? '浅色背景' : '深色背景')));
   }
   syncStatusBar();
 }
@@ -130,7 +180,7 @@ function setBgTone(v) {
 function syncTextTone(src, preset) {
   const seq = ++toneSeq;
   if (!src) {
-    document.documentElement.removeAttribute('data-onbg');
+    document.documentElement.setAttribute('data-onbg', 'dark');
     const tip = $('#textToneTip');
     if (tip) tip.textContent = '';
     syncStatusBar();
@@ -170,6 +220,11 @@ function updateBgTip() {
 
 function setTheme(t) {
   state.config.theme = t;
+  if (t === 'light' || t === 'dark') {
+    state.config.preset = '';
+    state.config.myPresetId = null;
+    state.config.bgImage = '';
+  }
   save();
   applyTheme();
   syncPresetBox();
@@ -180,6 +235,7 @@ function applyPreset(id) {
   const p = getPreset(id);
   if (!p) return;
   state.config.theme = 'custom';
+  state.config.myPresetId = null;
   state.config.preset = p.id;
   if (p.accent) state.config.accent = p.accent;
   try { save(); } catch (e) {}
@@ -354,6 +410,15 @@ function handleBgFile(file) {
   reader.readAsDataURL(file);
 }
 
+const THEME_COLORS = [
+  { name: '蓝', v: '#2563eb' },
+  { name: '青', v: '#0d9488' },
+  { name: '紫', v: '#7c3aed' },
+  { name: '橙', v: '#ea580c' },
+  { name: '红', v: '#dc2626' },
+  { name: '绿', v: '#15803d' }
+];
+
 const ACCENTS = [
   { name: '默认', v: '' },
   { name: '青', v: '#0fb9a3' },
@@ -375,6 +440,22 @@ function accentDotsHtml() {
     '" data-accent="' + a.v + '" title="' + a.name + '" style="background:' + (a.v || '#4c7dff') + '"></div>').join('');
 }
 
+
+function themeDotsHtml() {
+  const cur = state.config.themeColor || '';
+  return THEME_COLORS.map(a => {
+    const cls = 'accent-dot' + (a.v ? '' : ' none') + ((a.v || '') === cur ? ' on' : '');
+    const style = a.v ? ' style="background:' + a.v + '"' : '';
+    return '<div class="' + cls + '" data-theme-color="' + a.v + '" title="' + a.name + '"' + style + '></div>';
+  }).join('');
+}
+
+function setThemeColor(v) {
+  state.config.themeColor = v || '';
+  save();
+  applyTheme();
+  renderThemePage();
+}
 
 function renderAccentRow() {
   const row = document.querySelector('#themePageBody .accent-row');
@@ -454,6 +535,7 @@ function applyMyPreset(id) {
   const m = myPresets().filter(function (x) { return x.id === id; })[0];
   if (!m) return;
   state.config.theme = m.theme || 'custom';
+  state.config.myPresetId = m.id;
   state.config.preset = m.preset || '';
   state.config.bgImage = m.bgImage || '';
   state.config.accent = m.accent || '';
@@ -544,15 +626,16 @@ function myPresetMenu(id) {
 function renderThemePage() {
   const t = state.config.theme || 'light';
   const dots = accentDotsHtml();
+  const themeDots = themeDotsHtml();
 
   const presetCards = THEME_PRESETS.map(p => `
-      <div class="preset-card${state.config.preset === p.id ? ' on' : ''}" data-preset-pick="${p.id}">
+      <div class="preset-card${!state.config.myPresetId && state.config.preset === p.id ? ' on' : ''}" data-preset-pick="${p.id}">
         <div class="pthumb" style="background-image:url('${absAssetUrl(p.img)}')"></div>
         <div class="pname">${p.name}</div>
         <div class="psub">${p.sub}</div>
       </div>`).join('');
   const myCards = myPresets().map(m => `
-      <div class="preset-card" data-my-pick="${m.id}">
+      <div class="preset-card${state.config.myPresetId === m.id ? ' on' : ''}" data-my-pick="${m.id}">
         <div class="pthumb" style="background-image:url('${myPresetThumb(m)}')"></div>
         <div class="pname">${udEsc(m.name)}</div>
         <div class="psub">个人模板</div>
@@ -560,19 +643,27 @@ function renderThemePage() {
       </div>`).join('');
   const body = $('#themePageBody');
   if (!body) return;
+  const glass = state.config.glassMode || 'frosted';
   body.innerHTML = `
-    <div class="section-title" style="margin-top:0;">外观主题</div>
-    <div class="theme-grid" style="margin-top:2px;">
+    <div class="section-title" style="margin-top:0;">主题特效</div>
+    <div class="theme-grid theme-grid-2" style="margin-top:2px;">
+      <div class="theme-card${glass === 'frosted' ? ' on' : ''}" data-glass-pick="frosted"><div class="swatch sw-frost"></div>磨砂玻璃</div>
+      <div class="theme-card${glass === 'clear' ? ' on' : ''}" data-glass-pick="clear"><div class="swatch sw-clear"></div>透明玻璃</div>
+    </div>
+    <div class="hint">磨砂玻璃会模糊背景，滑动时可能有一瞬重采样；透明玻璃不模糊，滑动最稳。</div>
+
+    <div class="section-title">外观颜色</div>
+    <div class="theme-grid theme-grid-2" style="margin-top:2px;">
       <div class="theme-card${t === 'light' ? ' on' : ''}" data-theme-pick="light"><div class="swatch sw-light"></div>浅色</div>
       <div class="theme-card${t === 'dark' ? ' on' : ''}" data-theme-pick="dark"><div class="swatch sw-dark"></div>深色</div>
-      <div class="theme-card${t === 'custom' ? ' on' : ''}" data-theme-pick="custom"><div class="swatch sw-custom"></div>自定义</div>
     </div>
-    <div class="preset-box" id="presetBox">
-      <div class="section-title">预设模板</div>
-      <div class="preset-grid">
-        ${presetCards}
-      </div>
+    <div class="hint" id="wallTip"></div>
+
+    <div class="section-title">预设模板</div>
+    <div class="preset-grid">
+      ${presetCards}
     </div>
+
     <div class="section-title">个人模板</div>
     <div class="preset-grid">
       ${myCards}
@@ -582,24 +673,32 @@ function renderThemePage() {
         <div class="psub">选图后取名保存</div>
       </div>
     </div>
-    <div class="section-title">背景明暗</div>
+
+    <div class="section-title">自定义外观颜色</div>
     <div class="theme-grid" style="margin-top:2px;">
       <div class="theme-card${(state.config.bgTone || 'auto') === 'auto' ? ' on' : ''}" data-tone-pick="auto"><div class="swatch sw-custom"></div>自动检测</div>
       <div class="theme-card${state.config.bgTone === 'light' ? ' on' : ''}" data-tone-pick="light"><div class="swatch sw-light"></div>浅色背景</div>
       <div class="theme-card${state.config.bgTone === 'dark' ? ' on' : ''}" data-tone-pick="dark"><div class="swatch sw-dark"></div>深色背景</div>
     </div>
+
     <div class="section-title">主题颜色</div>
-    <div class="accent-row">${dots}</div>
+    <div class="accent-row">${themeDots}</div>
     <div class="hint" id="textToneTip"></div>
     <div class="mine-row">
       <button class="ghost" id="btnClearBg">移除背景图</button>
     </div>
   `;
+  body.querySelectorAll('[data-glass-pick]').forEach(el => {
+    el.onclick = () => setGlassMode(el.dataset.glassPick);
+  });
   body.querySelectorAll('[data-theme-pick]').forEach(el => {
     el.onclick = () => setTheme(el.dataset.themePick);
   });
   body.querySelectorAll('[data-accent]').forEach(el => {
     el.onclick = () => setAccent(el.dataset.accent);
+  });
+  body.querySelectorAll('[data-theme-color]').forEach(el => {
+    el.onclick = () => setThemeColor(el.dataset.themeColor);
   });
   body.querySelectorAll('[data-tone-pick]').forEach(el => {
     el.onclick = () => setBgTone(el.dataset.tonePick);
@@ -607,6 +706,11 @@ function renderThemePage() {
   body.querySelectorAll('[data-preset-pick]').forEach(el => {
     el.onclick = () => applyPreset(el.dataset.presetPick);
   });
+  const wt = $('#wallTip');
+  if (wt) {
+    if (t === 'custom') wt.textContent = '当前使用壁纸外观（选壁纸后自动切到这里）';
+    else wt.textContent = '';
+  }
   $('#presetOwn').onclick = pickOwnBg;
   body.querySelectorAll('[data-my-pick]').forEach(el => {
     el.onclick = () => applyMyPreset(el.dataset.myPick);
@@ -626,25 +730,24 @@ function renderThemePage() {
     syncPresetBox();
   };
   syncPresetBox();
+  applyPickBorder();
 }
 
 
 function syncPresetBox() {
   const box = $('#presetBox');
-  if (!box) return;
-  // 预设模板常驻显示：浅色/深色主题下也要能看到并点回来
-  box.classList.add('show');
+  if (box) box.classList.add('show');
 
   const clearBtn = $('#btnClearBg');
   if (clearBtn) clearBtn.style.display = (state.config.preset || state.config.bgImage) ? '' : 'none';
   $$('[data-preset-pick]').forEach(el => el.classList.toggle('on', (el.dataset.presetPick || '') === (state.config.preset || '')));
   updateBgTip();
+  applyPickBorder();
 }
 
 function applyAccent() {
   const a = state.config.accent || '';
-  if (a) document.documentElement.style.setProperty('--accent', a);
-  else document.documentElement.style.removeProperty('--accent');
+  document.documentElement.style.setProperty('--accent', a || '#4c7dff');
 }
 
 function setAccent(v) {
